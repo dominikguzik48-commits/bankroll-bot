@@ -1,0 +1,29 @@
+# Bankroll Challenge. Virtual bankroll, tracked separately from the broker account balance.
+# The bot sizes trades ONLY off this bankroll and its own P&L.
+enabled: true
+
+# The paper challenge does not start until you set this to true yourself.
+approved_to_start: false
+
+starting_bankroll: 1000
+target: 5000        # reach it -> close all, halt, write reports/challenge_complete.md, wait
+ruin_floor: 200     # fall below it -> close all, halt, write reports/challenge_failed.md
+
+# The only risk-manager limits the challenge changes:
+risk_per_trade_pct: 25       # % of current bankroll. Tune here.
+max_open_positions: 1
+
+# Milestones: log + alert, and the risk manager re-evaluates sizing.
+# Risk per trade steps down linearly from risk_per_trade_pct to min_risk_per_trade_pct,
+# reaching the minimum at the last milestone. It ratchets: once a milestone is hit the
+# lower risk stays even if the bankroll dips back below it.
+milestones: [1500, 2000, 2500]
+min_risk_per_trade_pct: 10
+
+# $1-wide verticals (MARGIN_L3 only) are allowed on these underlyings, and on any
+# liquid stock/ETF under max_underlying_price whose option markets are penny-wide.
+narrow_verticals:
+  width: 1
+  always_allowed: [SPY, QQQ, IWM]
+  max_underlying_price: 100
+  max_leg_spread: 0.01

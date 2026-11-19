@@ -1,0 +1,33 @@
+# Risk manager. Every opening order goes through it; it has the final say.
+# Challenge mode overrides ONLY max_risk_per_trade_pct and max_open_positions.
+
+max_risk_per_trade_pct: 5
+max_open_positions: 3
+
+# Defined-risk only. Every short leg must be covered by a long leg of the same type and
+# expiry. No naked shorts, no exceptions. (This is not configurable on purpose.)
+defined_risk_only: true
+
+# Minimum width for spreads outside the challenge's narrow-vertical rule.
+min_spread_width: 5
+
+# Fees are counted inside max loss: entry + exit, per contract per leg.
+fees_per_contract: 0.65   # assumption: set to your actual Webull per-contract fees
+
+liquidity:
+  min_bid: 0.05
+  max_spread_abs: 0.15
+  max_spread_pct_of_mid: 0.10
+  min_open_interest: 500
+  min_volume: 50
+
+stale_data_max_age_seconds: 60
+
+# No new positions on these dates (FOMC, CPI, etc.). Fill these in yourself: YYYY-MM-DD.
+blackout_dates: []
+
+# If this file exists: flatten everything and open nothing until it is removed.
+kill_switch_file: state/KILL
+
+# Graduation gate: max peak-to-trough drawdown of the bankroll.
+max_drawdown_pct: 35

@@ -1,0 +1,27 @@
+# CASH_L2 strategy v1: trend/momentum, buy calls or puts.
+universe: [SPY, QQQ, IWM, AAPL, NVDA, AMD, BAC, F]
+
+signal:
+  fast_sma: 20
+  slow_sma: 50
+  rsi_period: 14
+  # cross: enter only on the day the 20 SMA crosses the 50 SMA (rare: a few per name per year)
+  # trend: in an established trend (fast vs slow), enter when RSI crosses back through 50
+  entry_mode: trend
+  call_rsi_min: 50
+  call_rsi_max: 70
+  put_rsi_min: 30
+  put_rsi_max: 50
+
+contract:
+  min_dte: 7
+  max_dte: 30
+  target_dte: 21
+  min_delta: 0.30
+  max_delta: 0.50
+  target_delta: 0.40
+
+exits:
+  take_profit_pct: 50
+  stop_loss_pct: 40
+  close_at_dte: 3     # never hold into expiration

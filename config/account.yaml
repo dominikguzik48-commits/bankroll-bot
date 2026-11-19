@@ -1,0 +1,25 @@
+# Account profile. Mirrors real Webull option permission levels.
+#
+# The bot NEVER changes `profile` itself. Set it by hand.
+#   CASH_L2   : long calls / long puts only. Max loss = premium paid. Settled cash only (T+1).
+#   MARGIN_L3 : adds vertical spreads and iron condors. Only takes effect if the bankroll
+#               was >= margin_l3_min_bankroll at the START of the trading day. Otherwise the
+#               bot trades as CASH_L2 that day and logs why.
+profile: CASH_L2
+
+margin_l3_min_bankroll: 2000
+
+# When the bankroll crosses this level the bot alerts you, once per crossing,
+# and keeps trading as CASH_L2 until you change `profile` above.
+margin_alert_bankroll: 2000
+
+# Business days until sale proceeds settle (options settle T+1).
+settlement_days: 1
+
+profiles:
+  CASH_L2:
+    allowed_structures: [long_call, long_put]
+    settled_cash_only: true
+  MARGIN_L3:
+    allowed_structures: [long_call, long_put, vertical_spread, iron_condor]
+    settled_cash_only: false

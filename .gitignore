@@ -1,0 +1,10 @@
+# local state, logs and credentials-adjacent files never go to GitHub
+state/
+logs/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+reports/challenge_*.md
+reports/graduation.md

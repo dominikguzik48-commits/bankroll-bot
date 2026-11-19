@@ -1,0 +1,42 @@
+# Simulator / Monte Carlo settings. SYNTHETIC market; no real price history is used.
+risk_free_rate: 0.04
+horizon_trading_days: 756   # 3 years. Runs that neither hit target nor ruin are "unresolved".
+warmup_days: 60
+start_date: "2027-01-04"
+
+fills:
+  # Buys fill at mid + fill_frac * half-spread + extra; sells at mid - same.
+  fill_frac_of_half_spread: 0.75
+  extra_slippage: 0.01
+
+market_models:
+  regime:          # bull/bear regimes that persist, so trends exist
+    regimes:
+      bull: {mu: 0.15, sigma: 0.13, p_leave: 0.004}
+      bear: {mu: -0.25, sigma: 0.30, p_leave: 0.0167}
+    jump_prob: 0.004
+    jump_mean: -0.04
+    jump_sd: 0.02
+  random_walk:     # no trend persistence: the signal has no edge by construction
+    regimes:
+      only: {mu: 0.07, sigma: 0.17, p_leave: 0.0}
+    jump_prob: 0.0
+    jump_mean: 0.0
+    jump_sd: 0.0
+
+# Implied vol = realized regime vol * variance_risk_premium * lognormal noise (AR(1)).
+variance_risk_premium: 1.10
+iv_noise_sd: 0.08
+iv_noise_phi: 0.95
+skew: 0.8            # iv(K) = atm_iv * (1 + skew * ln(S/K)), floored
+
+underlyings:
+  # start prices are placeholders for the synthetic paths, not quotes
+  SPY:  {price: 660, beta: 1.00, idio: 0.00, strike_step: 1.0, expiries: daily,  spread_pct: 0.02, min_spread: 0.01}
+  QQQ:  {price: 600, beta: 1.20, idio: 0.06, strike_step: 1.0, expiries: daily,  spread_pct: 0.02, min_spread: 0.01}
+  IWM:  {price: 245, beta: 1.15, idio: 0.10, strike_step: 1.0, expiries: daily,  spread_pct: 0.02, min_spread: 0.01}
+  AAPL: {price: 270, beta: 1.10, idio: 0.20, strike_step: 2.5, expiries: weekly, spread_pct: 0.015, min_spread: 0.02}
+  NVDA: {price: 190, beta: 1.60, idio: 0.35, strike_step: 2.5, expiries: weekly, spread_pct: 0.015, min_spread: 0.02}
+  AMD:  {price: 240, beta: 1.60, idio: 0.40, strike_step: 2.5, expiries: weekly, spread_pct: 0.02, min_spread: 0.02}
+  BAC:  {price: 52,  beta: 1.20, idio: 0.18, strike_step: 1.0, expiries: weekly, spread_pct: 0.03, min_spread: 0.01}
+  F:    {price: 13,  beta: 1.00, idio: 0.20, strike_step: 0.5, expiries: weekly, spread_pct: 0.05, min_spread: 0.01}
