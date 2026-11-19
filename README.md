@@ -4,9 +4,10 @@ An options bot with a virtual challenge bankroll, account-profile permissions th
 Webull's option levels, a risk manager that approves every opening order, a synthetic-market
 Monte Carlo and a weekly graduation report.
 
-**Status:** the simulator and tests run. Paper trading on Webull is **not** enabled: the
-Webull adapter (`bot/broker.py: WebullPaperBroker`) is a stub, and the challenge waits for
-the owner's explicit go-ahead. Nothing here can place a live order.
+**Status:** the simulator, tests and Webull market-data adapter are in place. Webull is
+used for market data only; paper trades fill inside the bot at live Webull bid/ask
+(`bot/live.py`). The challenge does not start until `approved_to_start: true` is set in
+`config/challenge.yaml`. Nothing here can place a live order.
 
 ## Layout
 
@@ -23,7 +24,10 @@ the owner's explicit go-ahead. Nothing here can place a live order.
 | `bot/ledger.py` | virtual bankroll with settled and unsettled cash (T+1) |
 | `bot/engine.py` | the daily loop (same code for the simulator and paper trading) |
 | `bot/reports.py` | `challenge_complete.md`, `challenge_failed.md`, `graduation.md` |
-| `sim/` | synthetic market and Monte Carlo |
+| `bot/calendar.py` | NYSE calendar: holidays, 1 PM early closes, T+1 settlement days |
+| `bot/volatility.py` | GARCH(1,1) volatility forecast and the IV filter |
+| `bot/tuner.py` | walk-forward tuning with guardrails; proposes, never applies |
+| `sim/` | synthetic market, history replay and Monte Carlo |
 
 ## Commands
 
@@ -31,13 +35,22 @@ the owner's explicit go-ahead. Nothing here can place a live order.
 python3 -m pytest -q
 python3 -m bot montecarlo --runs 5000 --risk 10 25 50
 python3 -m bot graduation          # reads state/paper/, writes reports/graduation.md
+python3 -m bot montecarlo --runs 2000 --risk 25 --set strategy.vol_filter.enabled=true
+python3 -m bot fetch-history       # Webull daily closes -> state/history/
+python3 -m bot calibrate-vol       # GARCH(1,1) per symbol (arch) -> config/vol_params.yaml
+python3 -m bot tune                # walk-forward tuning (optuna) -> reports/tuning.md, proposal only
 ```
 
-Weekly graduation report (cron, Fridays 17:10 local):
+The daily run writes the graduation report every Friday. Windows scheduling is in `WINDOWS.md`.
 
-```
-10 17 * * 5 cd /path/to/bankroll-bot && python3 -m bot graduation
-```
+## Open-source pieces
+
+| Package | License | Used for |
+|---|---|---|
+| `pandas_market_calendars` | MIT | NYSE holidays and early closes |
+| `arch` | NCSA | GARCH(1,1) fits for the volatility forecast |
+| `optuna` | MIT | parameter search inside the walk-forward tuner |
+| `webull-openapi-python-sdk` | Apache-2.0 | Webull market data (read-only) |
 
 ## Rules as implemented
 
@@ -59,7 +72,8 @@ Weekly graduation report (cron, Fridays 17:10 local):
 
 ## Not done yet
 
-- Webull paper adapter (positions, orders, fills) and a live market-data feed.
+- Confirm Webull's response fields from `webull-probe` output.
 - A strategy for MARGIN_L3 spreads. The risk rules for verticals and condors exist; nothing generates them.
-- Real blackout dates in `config/risk.yaml` (empty now).
+- Real blackout dates in `config/risk.yaml` (empty now); the Webull economic calendar can fill these once its format is confirmed.
+- The volatility filter is off by default until results show it helps.
 - Push alerts: `Alerts.send` is a no-op; alerts go to `logs/alerts.log`.

@@ -25,3 +25,10 @@ exits:
   take_profit_pct: 50
   stop_loss_pct: 40
   close_at_dte: 3     # never hold into expiration
+
+# Skip options whose implied vol is rich against a GARCH(1,1) forecast of realized vol
+# over the option's life. Off until the Monte Carlo/paper results show it helps.
+vol_filter:
+  enabled: false
+  max_iv_to_forecast: 1.0    # buy only if IV <= this x forecast vol
+  min_history_days: 60

@@ -66,14 +66,16 @@ def compute_signals(closes: np.ndarray, cfg: dict):
 
 
 def select_contract(chain: list[OptionQuote], side: str, today: dt.date, cfg: dict,
-                    risk, budget: float, spendable: float, now: dt.datetime):
+                    risk, budget: float, spendable: float, now: dt.datetime, vol_forecast=None):
     """Pick the contract nearest target delta/DTE that fits inside the risk budget.
     Returns (OrderIntent, None) or (None, reason). No fit -> no trade."""
     c = cfg["contract"]
     right = "C" if side == "call" else "P"
     fee = risk.fees_per_contract
     best, best_key = None, None
-    n_window = n_illiquid = n_too_big = 0
+    n_window = n_illiquid = n_too_big = n_rich = 0
+    vf = cfg.get("vol_filter") or {}
+    use_vf = bool(vf.get("enabled")) and vol_forecast is not None
     for q in chain:
         k = q.contract
         if k.right != right:
@@ -87,6 +89,11 @@ def select_contract(chain: list[OptionQuote], side: str, today: dt.date, cfg: di
         if risk.liquidity_problems(q) or risk.stale_problems(q, now):
             n_illiquid += 1
             continue
+        if use_vf:
+            fv = vol_forecast(dte)
+            if fv is None or q.iv <= 0 or q.iv > float(vf["max_iv_to_forecast"]) * fv:
+                n_rich += 1
+                continue
         per_contract_risk = q.ask * MULTIPLIER + 2 * fee
         per_contract_cost = q.ask * MULTIPLIER + fee
         qty = int(min(budget / per_contract_risk, spendable / per_contract_cost) + 1e-9)
@@ -100,6 +107,7 @@ def select_contract(chain: list[OptionQuote], side: str, today: dt.date, cfg: di
         if n_window == 0:
             return None, "no contracts in DTE/delta window"
         return None, (f"{n_window} contracts in window: {n_illiquid} fail liquidity/staleness, "
+                      f"{n_rich} too expensive vs vol forecast, "
                       f"{n_too_big} cost more than the ${budget:,.2f} risk budget")
     q, qty = best
     structure = LONG_CALL if right == "C" else LONG_PUT

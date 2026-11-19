@@ -45,16 +45,32 @@ mapping (bid/ask/delta/open interest) against Webull's real responses.
 
 Set `approved_to_start: true` in `config\challenge.yaml`. Until then, `run-day` does nothing.
 
-Schedule the daily run for weekdays at **3:45 PM US/Eastern**. Convert to your local time;
-the example below is for a PC set to Eastern time:
+Schedule the daily run twice each weekday, at **12:45 PM and 3:45 PM US/Eastern**. Convert
+to your local time; the example is for a PC set to Eastern time:
 
 ```powershell
-schtasks /Create /TN "BankrollBot" /TR "C:\bankroll-bot\run_daily.bat" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 15:45
+schtasks /Create /TN "BankrollBot-1245" /TR "C:\bankroll-bot\run_daily.bat" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 12:45
+schtasks /Create /TN "BankrollBot-1545" /TR "C:\bankroll-bot\run_daily.bat" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 15:45
 ```
 
-The PC must be awake at that time (Settings → System → Power → Sleep: Never, or use
-Task Scheduler's "Wake the computer to run this task"). Holidays are detected
-automatically: no SPY bar for today means nothing runs.
+The bot only acts in the window 40 to 5 minutes before that day's NYSE close, using the
+official exchange calendar. On normal days the 3:45 run trades and the 12:45 run exits
+without doing anything. On early-close days (1 PM, e.g. the day after Thanksgiving) the
+12:45 run trades. Holidays are skipped.
+
+The PC must be awake at those times (Settings → System → Power → Sleep: Never, or tick
+"Wake the computer to run this task" in Task Scheduler).
+
+## 4. Optional: use real history (after the probe works)
+
+```powershell
+python -m bot fetch-history      # ~4.7 years of daily closes into state\history\
+python -m bot calibrate-vol      # fit GARCH per symbol -> config\vol_params.yaml
+python -m bot tune               # walk-forward tuning -> reports\tuning.md (never changes config)
+```
+
+`tune` only writes `config\strategy_proposed.yaml` if every guardrail passes. You decide
+whether to copy anything into `config\strategy.yaml`.
 
 ## Files to watch
 

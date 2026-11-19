@@ -20,6 +20,20 @@ from bot.reports import max_drawdown
 from sim.market import MarketBatch
 
 
+def apply_overrides(cfg: Config, overrides: list[str]) -> Config:
+    """overrides like 'strategy.vol_filter.enabled=true' (values parsed as YAML)."""
+    import yaml
+    cfg = cfg.copy()
+    for o in overrides or []:
+        path, val = o.split("=", 1)
+        parts = path.split(".")
+        d = getattr(cfg, parts[0])
+        for k in parts[1:-1]:
+            d = d.setdefault(k, {})
+        d[parts[-1]] = yaml.safe_load(val)
+    return cfg
+
+
 def run_batch(args) -> list[dict]:
     cfg, model, risk_pct, n_runs, seed = args
     cfg = cfg.copy()

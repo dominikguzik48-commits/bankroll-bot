@@ -76,7 +76,7 @@ def test_run_day_paper_session(tmp_cfg, monkeypatch):
     today = dt.date(2027, 3, 3)
     FakeWB.today = today
     monkeypatch.setattr(live, "WebullData", FakeWB)
-    msg = live.run_day(tmp_cfg, now=dt.datetime.combine(today, dt.time(15, 45)))
+    msg = live.run_day(tmp_cfg, now=dt.datetime.combine(today, dt.time(15, 45)), check_window=False)
     assert today.isoformat() in msg
     state = json.loads((tmp_cfg.root / "state/paper/state.json").read_text())
     pos = state["ledger"]["positions"]
@@ -85,4 +85,14 @@ def test_run_day_paper_session(tmp_cfg, monkeypatch):
     assert pos[0]["max_loss"] <= 250 + 1e-9
     assert state["broker_positions"]
     # running twice the same day does nothing
-    assert "Already ran" in live.run_day(tmp_cfg, now=dt.datetime.combine(today, dt.time(15, 50)))
+    assert "Already ran" in live.run_day(tmp_cfg, now=dt.datetime.combine(today, dt.time(15, 50)), check_window=False)
+
+
+def test_calendar_windows():
+    from bot.calendar import ET, add_trading_days, run_window
+    u = lambda *a: dt.datetime(*a, tzinfo=ET).astimezone(dt.timezone.utc)
+    assert run_window(u(2026, 11, 27, 12, 40))[0]           # early close, 1 PM
+    assert not run_window(u(2026, 11, 27, 15, 45))[0]
+    assert "closed" in run_window(u(2026, 11, 26, 15, 45))[1]  # Thanksgiving
+    assert run_window(u(2026, 7, 1, 15, 45))[0]             # daylight saving time
+    assert add_trading_days(dt.date(2026, 12, 24), 1) == dt.date(2026, 12, 28)

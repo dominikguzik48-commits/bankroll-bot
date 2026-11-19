@@ -15,6 +15,7 @@ import numpy as np
 from bot.models import OptionContract, OptionQuote, Signal
 from bot.pricing import bs_price_delta
 from bot.strategy import compute_signals
+from bot.volatility import calendar_to_trading_days, garch_next_var, term_vol
 
 EXTRA_EXPIRY_DAYS = 45
 
@@ -95,12 +96,52 @@ class MarketBatch:
         for t in range(1, T):
             e[t] = phi * e[t - 1] + eps[t]
         self.atm_iv = vol * float(sim["variance_risk_premium"]) * np.exp(e)
-        self.skew = float(sim["skew"])
+        self._derive()
+
+    @classmethod
+    def from_history(cls, cfg, dates: list[dt.date], closes: np.ndarray, warmup: int | None = None):
+        """Replay REAL daily closes [T, N] (one run). Option prices are modeled with
+        Black-Scholes at IV = GARCH forecast x variance risk premium, since free historical
+        option quotes are not available; spreads/fills/fees as in the simulator."""
+        self = cls.__new__(cls)
+        sim = cfg.sim
+        self.cfg = cfg
+        self.names = list(cfg.strategy["universe"])
+        self.info = [sim["underlyings"][n] for n in self.names]
+        self.r = float(sim["risk_free_rate"])
+        T, N = closes.shape
+        self.warmup = int(warmup if warmup is not None else sim["warmup_days"])
+        self.horizon = T - self.warmup
+        self.T, self.R, self.N = T, 1, N
+        last = np.datetime64(dates[-1], "D")
+        extra = [np.busday_offset(last, i, roll="forward").astype(dt.date) for i in range(1, EXTRA_EXPIRY_DAYS + 1)]
+        self.dates = list(dates) + extra
+        self.weekday = np.array([d.weekday() for d in self.dates])
+        self.ordinal = np.array([d.toordinal() for d in self.dates])
+        self.close = closes.reshape(T, 1, N).astype(float)
+        lr = np.diff(np.log(self.close), axis=0, prepend=np.log(self.close[:1]))
+        s2, _ = garch_next_var(lr.reshape(T, N))
+        prev = np.vstack([s2[:1], s2[:-1]])   # forecast made with data through yesterday
+        self.atm_iv = (np.sqrt(prev * 252) * float(sim["variance_risk_premium"])).reshape(T, 1, N)
+        self._derive()
+        return self
+
+    def _derive(self):
+        cfg, T, R, N = self.cfg, self.T, self.R, self.N
+        self.skew = float(cfg.sim["skew"])
 
         call, put, strength = compute_signals(self.close.reshape(T, R * N), cfg.strategy)
         self.sig_call = call.reshape(T, R, N)
         self.sig_put = put.reshape(T, R, N)
         self.sig_strength = strength.reshape(T, R, N)
+
+        # GARCH(1,1) forecast from returns known so far (long-run var from the warmup window)
+        lr = np.diff(np.log(self.close), axis=0, prepend=np.log(self.close[:1]))
+        flat = lr.reshape(T, R * N)
+        lrv = np.maximum(flat[1:max(self.warmup, 3)].var(axis=0), 1e-8)
+        s2, _ = garch_next_var(flat, long_run_var=lrv)
+        self.garch_s2 = s2.reshape(T, R, N)
+        self.garch_lrv = lrv.reshape(R, N)
 
         # synthetic blackout days (~19/yr, stand-ins for FOMC/CPI)
         self.blackout_dates = {self.dates[i] for i in range(T) if i % 13 == 6}
@@ -121,6 +162,11 @@ class SimSnapshot:
         self.now = dt.datetime.combine(self.date, dt.time(15, 45))
         self.spy_close = float(b.close[t, r, b.spy_idx]) if b.spy_idx is not None else None
         self._cache: dict[str, OptionQuote] = {}
+
+    def vol_forecast(self, symbol: str, cal_days: int) -> float:
+        b, n = self.b, self.b.names.index(symbol)
+        return float(term_vol(b.garch_s2[self.t - 1, self.r, n], b.garch_lrv[self.r, n],
+                              calendar_to_trading_days(cal_days)))
 
     # signals known at the prior close; trade today
     def signals(self) -> list[Signal]:

@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import datetime as dt
 
-import numpy as np
 
 from .models import MULTIPLIER, Position
 
 
 def add_business_days(d: dt.date, n: int) -> dt.date:
-    return np.busday_offset(np.datetime64(d, "D"), n, roll="forward").astype(dt.date)
+    """Settlement date: n NYSE trading days later (skips weekends and exchange holidays)."""
+    from .calendar import add_trading_days
+    return add_trading_days(d, n)
 
 
 class Ledger:

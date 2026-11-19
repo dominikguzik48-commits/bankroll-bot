@@ -230,8 +230,10 @@ class Engine:
         for sig in sorted(sigs, key=lambda s: -s.strength):
             if sig.symbol in held:
                 continue
+            vf = getattr(snap, "vol_forecast", None)
             intent, why = select_contract(snap.chain(sig.symbol, sig.side), sig.side, today,
-                                          self.cfg.strategy, self.risk, budget, spendable, snap.now)
+                                          self.cfg.strategy, self.risk, budget, spendable, snap.now,
+                                          vol_forecast=(lambda d, s=sig.symbol: vf(s, d)) if vf else None)
             if intent is None:
                 self._event(today, "skip", symbol=sig.symbol, side=sig.side, why=why)
                 continue

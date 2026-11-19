@@ -4,7 +4,8 @@ Orders go to the bot's own simulated broker (SimBroker), not to Webull. Fills us
 Webull bid/ask with the same fill model as the Monte Carlo. Webull's API exposes no
 paper-trading endpoint that we have found, so this is how the paper test runs.
 
-Run once per trading day at about 3:45 PM US/Eastern (Task Scheduler; see WINDOWS.md).
+Task Scheduler starts it at 12:45 and 15:45 US/Eastern; it only acts inside the window 40 to 5
+minutes before that day's NYSE close, so early-close days (1 PM) and holidays are handled.
 """
 from __future__ import annotations
 
@@ -51,6 +52,14 @@ class LiveSnapshot:
                 out.append(Signal(s, "put", float(strength[-1, i])))
         return out
 
+    def vol_forecast(self, symbol: str, cal_days: int) -> float | None:
+        from .volatility import calendar_to_trading_days, forecast_from_closes
+        closes = [c for d, c in self.bars.get(symbol, []) if d < self.date]
+        if len(closes) < int(self.cfg.strategy.get("vol_filter", {}).get("min_history_days", 60)):
+            return None
+        params = (self.cfg.strategy.get("vol_params") or {}).get(symbol)
+        return forecast_from_closes(closes, calendar_to_trading_days(cal_days), params)
+
     def chain(self, symbol: str, side: str) -> list[OptionQuote]:
         S = self.prices.get(symbol)
         if not S:
@@ -87,10 +96,15 @@ def _held_underlyings(state_path) -> set[str]:
     return {p["underlying"] for p in d["ledger"]["positions"]}
 
 
-def run_day(cfg: Config, now: dt.datetime | None = None) -> str:
+def run_day(cfg: Config, now: dt.datetime | None = None, check_window: bool = True) -> str:
     if not cfg.challenge.get("approved_to_start"):
         return ("Not started: set approved_to_start: true in config/challenge.yaml once you have "
                 "reviewed the Monte Carlo and want the paper challenge to begin.")
+    if check_window:
+        from .calendar import run_window
+        ok, why = run_window(dt.datetime.now(dt.timezone.utc))
+        if not ok:
+            return why
     now = now or dt.datetime.now()
     today = now.date()
     paper = cfg.path("state/paper")
@@ -102,7 +116,7 @@ def run_day(cfg: Config, now: dt.datetime | None = None) -> str:
     bars = wb.daily_bars(syms, count=150)
     spy = bars.get("SPY") or []
     if not spy or spy[-1][0] != today:
-        return f"Market closed or no SPY bar for {today}; nothing done."
+        return f"No SPY bar from Webull for {today} yet; nothing done."
     prices = wb.last_prices(syms)
 
     alerts = Alerts(cfg.path("logs/alerts.log"))

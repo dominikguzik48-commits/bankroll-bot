@@ -300,3 +300,50 @@ def test_graduation_gates(cfg):
         t["pnl"] = 8.0
     _, res = graduation_report(J, cfg)
     assert dict(res["gates"])["Positive expectancy after commissions and a $0.05/contract haircut"] is False
+
+
+def test_vol_filter_skips_rich_options(cfg):
+    r = rm(cfg)
+    cfg.strategy["vol_filter"] = {"enabled": True, "max_iv_to_forecast": 1.0}
+    cheap = q(strike=506, delta=0.38, bid=1.0, ask=1.02)
+    cheap.iv = 0.18
+    rich = q(strike=505, delta=0.40, bid=1.0, ask=1.02)
+    rich.iv = 0.30
+    intent, _ = select_contract([rich, cheap], "call", TODAY, cfg.strategy, r, 250, 1000, NOW,
+                                vol_forecast=lambda d: 0.20)
+    assert intent.legs[0].contract.strike == 506
+    intent, why = select_contract([rich], "call", TODAY, cfg.strategy, r, 250, 1000, NOW,
+                                  vol_forecast=lambda d: 0.20)
+    assert intent is None and "1 too expensive vs vol forecast" in why
+    # filter off: the closer-to-target-delta rich contract is picked
+    cfg.strategy["vol_filter"]["enabled"] = False
+    intent, _ = select_contract([rich, cheap], "call", TODAY, cfg.strategy, r, 250, 1000, NOW,
+                                vol_forecast=lambda d: 0.20)
+    assert intent.legs[0].contract.strike == 505
+
+
+def test_garch_recovers_parameters():
+    import numpy as np
+    from bot.volatility import calibrate
+    rng = np.random.default_rng(1)
+    a, b, lrv = 0.07, 0.91, 0.2 ** 2 / 252
+    s2, r = lrv, []
+    for _ in range(3000):
+        x = np.sqrt(s2) * rng.standard_normal()
+        r.append(x)
+        s2 = lrv * (1 - a - b) + a * x * x + b * s2
+    fit = calibrate(100 * np.exp(np.cumsum(r)))
+    assert abs(fit["alpha"] - a) < 0.03 and abs(fit["beta"] - b) < 0.03
+
+
+def test_tuner_folds_and_guardrails(cfg):
+    from bot.tuner import folds, verdict
+    fs = folds(1200, 504, 126, 110)
+    assert len(fs) == 4
+    for (a, b), (c, d) in fs:
+        assert c + 110 == b          # test window starts right after training ends (after warmup)
+    fake = {"current": {}, "folds": [
+        {"best": {k: 20 for k in __import__("bot.tuner", fromlist=["SPACE"]).SPACE},
+         "test_new": {"log_growth": 0.01, "trades": 20}, "test_cur": {"log_growth": 0.02, "trades": 20}}] * 3}
+    v = verdict(cfg, fake, None, None, 110)
+    assert not v["approve"]          # worse than current out of sample -> no proposal

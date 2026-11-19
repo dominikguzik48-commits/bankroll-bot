@@ -35,11 +35,15 @@ class Config:
 def load_config(root: Path | str = ROOT) -> Config:
     root = Path(root)
     c = root / "config"
+    strategy = _load(c / "strategy.yaml")
+    vp = c / "vol_params.yaml"     # written by `python -m bot calibrate-vol`
+    if vp.exists():
+        strategy["vol_params"] = _load(vp)
     return Config(
         account=_load(c / "account.yaml"),
         challenge=_load(c / "challenge.yaml"),
         risk=_load(c / "risk.yaml"),
-        strategy=_load(c / "strategy.yaml"),
+        strategy=strategy,
         sim=_load(c / "sim.yaml"),
         root=root,
     )
